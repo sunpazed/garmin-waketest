@@ -190,7 +190,7 @@ class BasicView extends Ui.WatchFace {
       dc.drawText(dw/2,(dh/2)-(dc.getFontHeight(Gfx.FONT_NUMBER_HOT)/2),Gfx.FONT_NUMBER_HOT,hour.toString() + ":" + minute.toString(),Gfx.TEXT_JUSTIFY_CENTER);
 
       //  has it taken longer than 800ms to render the screen? then it's a slow onUpdate
-      if (time_diff > 800 ) {
+      if (time_diff > 200 ) {
         dc.setColor(Gfx.COLOR_YELLOW, Gfx.COLOR_TRANSPARENT);
         dc.drawText(dw/2,(dh*2/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"slow onUpdate " + update_step.toString(),Gfx.TEXT_JUSTIFY_CENTER);
       } else {
@@ -249,6 +249,7 @@ class BasicView extends Ui.WatchFace {
     //! The user has just looked at their watch. Timers and animations may be started here.
     function onExitSleep() {
 
+      ani_step++;
       ani_mode = "high power";
 
       // let's start our animation loop
