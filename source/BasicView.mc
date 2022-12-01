@@ -17,12 +17,15 @@ class BasicView extends Ui.WatchFace {
     // globals
     var debug = false;
     var timer1;
-    var timer_timeout = 100;
+    var timer_timeout = 50;
     var timer_steps = timer_timeout;
     var ani_step = 0;
     var update_step = 0;
     var last_timer = 0;
     var ani_mode = "sleeping";
+    var hasOLED = false;
+    var isHighPower = true;
+    var oledOffset = 0;
 
     // sensors / status
     var battery = 0;
@@ -104,6 +107,10 @@ class BasicView extends Ui.WatchFace {
       if (canvas_semicirc) {
       }
 
+      if (deviceSettings has :requiresBurnInProtection) {
+        hasOLED = deviceSettings.requiresBurnInProtection;
+      }
+
     }
 
 
@@ -181,40 +188,50 @@ class BasicView extends Ui.WatchFace {
       var dw = dc.getWidth();
       var dh = dc.getHeight();
 
+      dc.setColor(Gfx.COLOR_BLUE, Gfx.COLOR_BLACK);
+      dc.fillRectangle(update_step%dw,(dh/2)+(dc.getFontAscent(Gfx.FONT_NUMBER_HOT)/2),5,5);
+
       // let's see how long it's taken since the last onUpdate() call
       var currentTime = Sys.getTimer();
       var time_diff = (currentTime-last_timer);
 
       // draw the time
-      dc.setColor(Gfx.COLOR_WHITE, Gfx.COLOR_TRANSPARENT);
-      dc.drawText(dw/2,(dh/2)-(dc.getFontHeight(Gfx.FONT_NUMBER_HOT)/2),Gfx.FONT_NUMBER_HOT,hour.toString() + ":" + minute.toString(),Gfx.TEXT_JUSTIFY_CENTER);
+      if (!isHighPower && hasOLED) {
+        oledOffset = (dw/12)-Math.rand()%(dw/6);
+      } else {
+        oledOffset = 0;
+        dc.setColor(Gfx.COLOR_WHITE, Gfx.COLOR_TRANSPARENT);
+        dc.drawText(dw/2,(dh/2)-(dc.getFontHeight(Gfx.FONT_NUMBER_HOT)/2),Gfx.FONT_NUMBER_HOT,hour.toString() + ":" + minute.toString(),Gfx.TEXT_JUSTIFY_CENTER);
+      }
 
       //  has it taken longer than 800ms to render the screen? then it's a slow onUpdate
       if (time_diff > 200 ) {
         dc.setColor(Gfx.COLOR_YELLOW, Gfx.COLOR_TRANSPARENT);
-        dc.drawText(dw/2,(dh*2/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"slow onUpdate " + update_step.toString(),Gfx.TEXT_JUSTIFY_CENTER);
+        dc.drawText(dw/2,oledOffset+(dh*2/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"slow onUpdate " + update_step.toString(),Gfx.TEXT_JUSTIFY_CENTER);
       } else {
         dc.setColor(Gfx.COLOR_GREEN, Gfx.COLOR_TRANSPARENT);
-        dc.drawText(dw/2,(dh*2/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"fast onUpdate " + update_step.toString(),Gfx.TEXT_JUSTIFY_CENTER);
+        dc.drawText(dw/2,oledOffset+(dh*2/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"fast onUpdate " + update_step.toString(),Gfx.TEXT_JUSTIFY_CENTER);
       }
 
       // duration since the last onUpdate() call
-      dc.drawText(dw/2,(dh*1/6)-(dc.getFontHeight(Gfx.FONT_SYSTEM_XTINY)/2),Gfx.FONT_SYSTEM_XTINY,"duration " + time_diff.toString() + "ms",Gfx.TEXT_JUSTIFY_CENTER);
+      dc.drawText(dw/2,oledOffset+(dh*1/6)-(dc.getFontHeight(Gfx.FONT_SYSTEM_XTINY)/2),Gfx.FONT_SYSTEM_XTINY,"duration " + time_diff.toString() + "ms",Gfx.TEXT_JUSTIFY_CENTER);
 
 
       // is the watch in sleep mode, or is it awake and animating?
       if (ani_step > 0) {
         dc.setColor(Gfx.COLOR_GREEN, Gfx.COLOR_TRANSPARENT);
-        dc.drawText(dw/2,(dh*5/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"animate " + ani_step.toString(),Gfx.TEXT_JUSTIFY_CENTER);
+        dc.drawText(dw/2,oledOffset+(dh*5/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"animate " + ani_step.toString(),Gfx.TEXT_JUSTIFY_CENTER);
       } else {
         dc.setColor(Gfx.COLOR_RED, Gfx.COLOR_TRANSPARENT);
-        dc.drawText(dw/2,(dh*5/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"no animation",Gfx.TEXT_JUSTIFY_CENTER);
+        dc.drawText(dw/2,oledOffset+(dh*5/7)-(dc.getFontHeight(Gfx.FONT_SYSTEM_SMALL)/2),Gfx.FONT_SYSTEM_SMALL,"no animation",Gfx.TEXT_JUSTIFY_CENTER);
       }
 
       // what's the current sleep mode?
-      dc.drawText(dw/2,(dh*5/6)-(dc.getFontHeight(Gfx.FONT_SYSTEM_XTINY)/2),Gfx.FONT_SYSTEM_XTINY,ani_mode.toString(),Gfx.TEXT_JUSTIFY_CENTER);
+      dc.drawText(dw/2,oledOffset+(dh*5/6)-(dc.getFontHeight(Gfx.FONT_SYSTEM_XTINY)/2),Gfx.FONT_SYSTEM_XTINY,ani_mode.toString(),Gfx.TEXT_JUSTIFY_CENTER);
 
       last_timer = currentTime;
+
+      timer1 = null;
 
     }
 
@@ -233,14 +250,12 @@ class BasicView extends Ui.WatchFace {
       ani_step++;
 
       // timer not greater than 500ms? then let's start the timer again
-      if (timer_steps < 500) {
+      if (timer1 == null) {
         timer1 = new Timer.Timer();
         timer1.start(method(:callback1), timer_steps, false );
       } else {
         // timer exists? stop it
-        if (timer1) {
-          timer1.stop();
-        }
+        timer1.stop();
       }
 
 
@@ -249,17 +264,22 @@ class BasicView extends Ui.WatchFace {
     //! The user has just looked at their watch. Timers and animations may be started here.
     function onExitSleep() {
 
+      isHighPower = true;
       ani_step++;
       ani_mode = "high power";
 
       // let's start our animation loop
-      timer1 = new Timer.Timer();
-      timer1.start(method(:callback1), timer_steps, false );
+      if (timer1 == null) {
+        timer1 = new Timer.Timer();
+        timer1.start(method(:callback1), timer_steps, false );
+      }
+
     }
 
     //! Terminate any active timers and prepare for slow updates.
     function onEnterSleep() {
 
+      isHighPower = false;
       ani_mode = "low power";
 
       // bye bye timer
